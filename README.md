@@ -1,2 +1,2 @@
 # pytorch-package-template
-Template for building pytorch models.
+Template for building pytorch-lightning models.

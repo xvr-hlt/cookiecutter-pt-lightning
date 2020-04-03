@@ -1,0 +1,22 @@
+early_stopping:
+    monitor: val_loss
+    patience: 10
+    mode: min
+optim:
+    kwargs:
+        lr: 5.0e-06
+    type: Adam  
+optim_scheduler:
+    type: ExponentialLR
+    kwargs:
+        gamma: 0.99
+trainer:
+    gpus: 1
+    use_amp: False
+    distributed_backend: None
+    max_epochs: 100
+    num_sanity_val_steps: 5
+loss:
+    kwargs:
+        pos_weight: [0.1]
+    type: BCEWithLogitsLoss
