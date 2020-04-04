@@ -14,7 +14,7 @@ class Experiment(pl.LightningModule):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        
+
         self.model = net.model.get_model(**config['model'])
 
         loss_conf = config['loss']
@@ -99,3 +99,4 @@ class Experiment(pl.LightningModule):
                              **config['trainer'])
 
         trainer.fit(experiment)
+

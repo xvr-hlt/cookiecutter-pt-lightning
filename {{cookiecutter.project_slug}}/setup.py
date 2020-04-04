@@ -4,6 +4,7 @@ REQUIRES = [
     'yapf',
     'pylint',
     'tqdm',
+    'fire',
     'pytest',
     'torch',
     'pytorch-lightning',
