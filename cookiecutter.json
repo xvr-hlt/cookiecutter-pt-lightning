@@ -7,6 +7,9 @@
   "python_version": "3.7",
   "pypi_username": "{{ cookiecutter.github_username }}",
   "version": "0.0.1",
+  "text": true,
+  "vision": false,
+  "segmentation": "{{ cookiecutter.vision }}",
   "open_source_license": [
     "MIT license",
     "BSD license",
