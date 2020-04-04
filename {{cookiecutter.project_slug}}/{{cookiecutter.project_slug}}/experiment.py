@@ -2,23 +2,24 @@ import datetime
 import os
 from os import path
 
+import torch
 import pytorch_lightning as pl
 from pytorch_lightning import callbacks
 
-from . import nn
-
+from . import net
+from .data import instance, loader
 
 class Experiment(pl.LightningModule):
 
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.model = None
+        
+        self.model = net.model.get_model(**config['model'])
 
         loss_conf = config['loss']
-        loss_cls = nn.losses.__dict[loss_conf['type']]
+        loss_cls = net.losses.__dict__[loss_conf['type']]
         self.loss = loss_cls(**loss_conf['kwargs'])
-
         self._batch_size = None
 
     @property
@@ -57,25 +58,29 @@ class Experiment(pl.LightningModule):
 
     def configure_optimizers(self):
         optim_conf = self.config['optim']
-        optim_cls = nn.optim.__dict__[optim_conf['type']]
+        optim_cls = net.optim.__dict__[optim_conf['type']]
         optimizer = optim_cls(self.parameters(), **optim_conf['kwargs'])
 
         optim_scheduler_conf = self.config['optim_scheduler']
-        optim_scheduler_cls = nn.optim.lr_scheduler.__dict__[
+        optim_scheduler_cls = net.optim.lr_scheduler.__dict__[
             optim_scheduler_conf['type']]
         optim_scheduler = optim_scheduler_cls(optimizer,
                                               **optim_scheduler_conf['kwargs'])
         return [optimizer], [optim_scheduler]
 
+    def prepare_data(self):
+        self.train_instances, self.val_instances = instance.get_train_val_instances(**self.config['instance'])
+
     def train_dataloader(self):
-        pass
+        dataset = loader.InstanceDataset(self.train_instances)
+        return torch.utils.data.DataLoader(dataset, batch_size=self.batch_size)
 
     def val_dataloader(self):
-        pass
+        dataset = loader.InstanceDataset(self.val_instances)
+        return torch.utils.data.DataLoader(dataset, batch_size=self.batch_size)
 
     @staticmethod
     def run(config):
-
         now = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
         run_dir = path.join("wandb", now)
         run_dir = path.abspath(run_dir)
@@ -83,6 +88,7 @@ class Experiment(pl.LightningModule):
 
         checkpoint_callback = callbacks.ModelCheckpoint(
             run_dir, monitor=config['early_stopping']['monitor'])
+
         early_stopping_callback = callbacks.EarlyStopping(
             **config['early_stopping'])
 
@@ -91,4 +97,5 @@ class Experiment(pl.LightningModule):
                              checkpoint_callback=checkpoint_callback,
                              early_stop_callback=early_stopping_callback,
                              **config['trainer'])
+
         trainer.fit(experiment)

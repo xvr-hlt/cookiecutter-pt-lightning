@@ -1,16 +1,12 @@
 import dataclasses
 
-import torch
-import numpy as np
-
-
 @dataclasses.dataclass
 class Instance:
     uid: str
-    label
-    {%if cookiecutter.vision %}
-    path: str{%end if %}
-    {%if cookiecutter.segentation %}
-    mask {%end if %}
-    {%if cookiecutter.text %}
-    text {%end if %}
+    label: str{%if cookiecutter.vision|int %}
+    path: str{%endif %}{%if cookiecutter.segmentation|int %}
+    mask: str{%endif %}{%if cookiecutter.text %}
+    text: str{%endif %}
+
+def get_train_val_instances(val_split=0.3):
+    return [], []

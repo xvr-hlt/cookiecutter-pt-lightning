@@ -1,11 +1,7 @@
 #!/usr/bin/env python
+import fire
 
-import argparse
-import logging
-import os
-import sys
-
-logger = logging.getLogger(__name__)
+from . import experiment
 
 if __name__ == '__main__':
-    pass
+    fire.Fire(experiment.Experiment.run)

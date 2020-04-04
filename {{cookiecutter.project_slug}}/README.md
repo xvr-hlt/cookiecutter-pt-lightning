@@ -17,8 +17,3 @@
 Just run (from the root folder):
 
     pytest
-
-### Run the code
-Note that the code should already compile at this point.
-Try to run the examples under $ROOT/examples
-(see next sections).
