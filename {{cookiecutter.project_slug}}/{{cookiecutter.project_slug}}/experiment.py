@@ -94,8 +94,8 @@ class Experiment(pl.LightningModule):
             kaggle.api.competition_download_files(COMPETITION_NAME, data_dir)
             with zipfile.ZipFile(data_dir / f"{COMPETITION_NAME}.zip",
                                  "r") as f:
-                f.extractall(dataset_dir){% else %}
-        dataset_dir = 'data/'{% endif %}
+                f.extractall(dataset_dir){% endif %}
+        dataset_dir = 'data/'
 
         self.train_instances, self.val_instances = instance.get_train_val_instances(
             dataset_dir, **self.config['instance'])
