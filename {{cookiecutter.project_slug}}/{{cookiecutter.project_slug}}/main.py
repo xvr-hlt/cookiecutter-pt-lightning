@@ -3,5 +3,8 @@ import fire
 
 from . import experiment
 
-if __name__ == '__main__':
+def main():
     fire.Fire(experiment.Experiment.run)
+
+if __name__ == '__main__':
+    main()

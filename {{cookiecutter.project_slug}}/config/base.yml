@@ -1,16 +1,23 @@
 classes: &classes
-    - null
+    - class_1
+seed: &seed 1 
+model:
+    model_name: &model_name "distilroberta-base"
+    classes: *classes
+batch_size: 768
+loader:
+    num_workers: 40
 data:
     classes: *classes
+    model_name: *model_name
+    max_length: 128
 instance:
-    val_split: 0.3
-model:
-    type: null
-    classes: *classes
+    val_split: 0.15
+    seed: *seed
 trainer:
-    gpus: 1
-    distributed_backend: None
-    use_amp: False
+    gpus: 4
+    distributed_backend: ddp
+    use_amp: True
     max_epochs: 100
     num_sanity_val_steps: 5
 early_stopping:
@@ -18,13 +25,12 @@ early_stopping:
     patience: 10
     mode: min
 loss:
-    type: BCEWithLogitsLoss
-    kwargs:
-        pos_weight: [1.]
+    type: CrossEntropyLoss
+    kwargs: {}
 optim:
     type: Adam
     kwargs:
-        lr: 5.0e-06
+        lr: 3.0e-05
 optim_scheduler:
     type: ExponentialLR
     kwargs:

@@ -1,14 +1,17 @@
 import datetime
 import os
 from os import path
+import pathlib
 
-import torch
 import pytorch_lightning as pl
+import torch
 from pytorch_lightning import callbacks
 
 from . import net
 from .data import instance, loader
 
+{%if cookiecutter.kaggle_competition %}
+COMPETITION_NAME = {{cookiecutter.kaggle_competition}}{%if endif %}
 class Experiment(pl.LightningModule):
 
     def __init__(self, config):
@@ -20,7 +23,11 @@ class Experiment(pl.LightningModule):
         loss_conf = config['loss']
         loss_cls = net.losses.__dict__[loss_conf['type']]
         self.loss = loss_cls(**loss_conf['kwargs'])
-        self._batch_size = None
+
+        self.batch_size = config['batch_size']
+        if self.config['trainer']['distributed_backend'] == 'dp':
+            self.batch_size *= self.config['trainer']['gpus']
+        self.pretrain = True
 
     @property
     def batch_size(self):
@@ -37,12 +44,7 @@ class Experiment(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         y_hat = self(x)
-
         loss_val = self.loss(y_hat, y)
-
-        if self.trainer.use_dp or self.trainer.use_ddp2:
-            loss_val = loss_val.unsqueeze(0)
-
         return {'loss': loss_val}
 
     def validation_step(self, batch, batch_idx):
@@ -50,11 +52,26 @@ class Experiment(pl.LightningModule):
         y_hat = self(x)
 
         loss_val = self.loss(y_hat, y)
-
-        if self.trainer.use_dp or self.trainer.use_ddp2:
-            loss_val = loss_val.unsqueeze(0)
-
         return {'val_loss': loss_val}
+
+    def validation_epoch_end(self, outputs):
+        val_loss = 0
+        for out in outputs:
+            loss = out['val_loss']
+            if self.trainer.use_dp or self.trainer.use_ddp2:
+                loss = torch.mean(loss)
+            val_loss += loss
+        val_loss /= len(outputs)
+
+        metrics = {'val_loss': val_loss}
+
+        if self.pretrain:
+            self.logger.log_hyperparams(self.config)
+            self.pretrain = False
+        else:
+            self.logger.log_metrics(metrics)
+        return metrics
+
 
     def configure_optimizers(self):
         optim_conf = self.config['optim']
@@ -68,16 +85,33 @@ class Experiment(pl.LightningModule):
                                               **optim_scheduler_conf['kwargs'])
         return [optimizer], [optim_scheduler]
 
-    def prepare_data(self):
-        self.train_instances, self.val_instances = instance.get_train_val_instances(**self.config['instance'])
+    def prepare_data(self):{%if cookiecutter.kaggle_competition %}
+        home_dir = pathlib.Path(__file__)
+        data_dir = home_dir.parent.parent / 'data'
+        dataset_dir = data_dir / COMPETITION_NAME
+        if not dataset_dir.exists():
+            kaggle.api.authenticate()
+            kaggle.api.competition_download_files(COMPETITION_NAME, data_dir)
+            with zipfile.ZipFile(data_dir / f"{COMPETITION_NAME}.zip",
+                                 "r") as f:
+                f.extractall(dataset_dir){% else %}
+        dataset_dir = 'data/'{%if endif %}
+
+        self.train_instances, self.val_instances = instance.get_train_val_instances(
+            dataset_dir, **self.config['instance'])
 
     def train_dataloader(self):
-        dataset = loader.InstanceDataset(self.train_instances)
-        return torch.utils.data.DataLoader(dataset, batch_size=self.batch_size)
+        dataset = loader.InstanceDataset(self.train_instances,
+                                         **self.config['data'])
+
+        return torch.utils.data.DataLoader(dataset, self.batch_size,
+                                           **self.config['loader'])
 
     def val_dataloader(self):
-        dataset = loader.InstanceDataset(self.val_instances)
-        return torch.utils.data.DataLoader(dataset, batch_size=self.batch_size)
+        dataset = loader.InstanceDataset(self.val_instances,
+                                         **self.config['data'])
+        return torch.utils.data.DataLoader(dataset, self.batch_size,
+                                           **self.config['loader'])
 
     @staticmethod
     def run(config):
@@ -87,7 +121,8 @@ class Experiment(pl.LightningModule):
         os.environ['WANDB_RUN_DIR'] = run_dir
 
         checkpoint_callback = callbacks.ModelCheckpoint(
-            run_dir, monitor=config['early_stopping']['monitor'])
+            run_dir + "/{epoch}-{val_loss:.2f}",
+            monitor=config['early_stopping']['monitor'])
 
         early_stopping_callback = callbacks.EarlyStopping(
             **config['early_stopping'])
@@ -99,4 +134,3 @@ class Experiment(pl.LightningModule):
                              **config['trainer'])
 
         trainer.fit(experiment)
-

@@ -4,11 +4,12 @@
   "github_username": "xvr-hlt",
   "project_slug": "new_project",
   "project_short_description": "Wonderful Project is wonderful.",
-  "python_version": "3.7",
+  "python_version": "3.6.9",
   "version": "0.0.1",
   "text": 0,
   "vision": 0,
   "segmentation": 0,
+  "kaggle_competition": "",
   "open_source_license": [
     "MIT license",
     "BSD license",
