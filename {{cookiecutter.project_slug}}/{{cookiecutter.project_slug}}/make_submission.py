@@ -8,7 +8,7 @@ from os import path
 import fire
 import kaggle
 
-from {{cookiecutter.project_stub}} import util
+from {{cookiecutter.project_slug}} import util
 
 
 def make_submission(inference_config="config/infer.yml",
@@ -19,8 +19,8 @@ def make_submission(inference_config="config/infer.yml",
 
     dir_util.mkpath(submission_dir)
     dir_util.copy_tree('src', path.join(submission_dir, 'src'))
-    dir_util.copy_tree('{{cookiecutter.project_stub}}', path.join(submission_dir, 'src',
-                                              '{{cookiecutter.project_stub}}'))
+    dir_util.copy_tree('{{cookiecutter.project_slug}}', path.join(submission_dir, 'src',
+                                              '{{cookiecutter.project_slug}}'))
 
     with open(path.join(submission_dir, 'dataset-metadata.json'), 'w') as f:
         json.dump(
