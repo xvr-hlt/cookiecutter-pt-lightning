@@ -11,7 +11,7 @@ from . import net
 from .data import instance, loader
 
 {%if cookiecutter.kaggle_competition %}
-COMPETITION_NAME = {{cookiecutter.kaggle_competition}}{%if endif %}
+COMPETITION_NAME = {{cookiecutter.kaggle_competition}}{%endif %}
 class Experiment(pl.LightningModule):
 
     def __init__(self, config):
