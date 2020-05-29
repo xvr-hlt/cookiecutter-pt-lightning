@@ -7,7 +7,6 @@ REQUIRES = [
     'fire',
     'pytest',
     'torch',
-    'dataclasses'
     'pytorch-lightning',
     'pyyaml',
     'wandb',

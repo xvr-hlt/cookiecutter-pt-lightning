@@ -4,6 +4,8 @@ from os import path
 import pathlib
 
 import pytorch_lightning as pl
+from pytorch_lightning.utilities import rank_zero_only
+
 import torch
 from pytorch_lightning import callbacks
 
@@ -21,25 +23,16 @@ class Experiment(pl.LightningModule):
         self.model = net.model.get_model(**config['model'])
 
         loss_conf = config['loss']
-        loss_cls = net.losses.__dict__[loss_conf['type']]
+        loss_cls = getattr(net.losses, loss_conf['type'])
         self.loss = loss_cls(**loss_conf['kwargs'])
 
         self.batch_size = config['batch_size']
-        if self.config['trainer']['distributed_backend'] == 'dp':
+        if self.config['trainer'].get('distributed_backend') == 'dp':
             self.batch_size *= self.config['trainer']['gpus']
         self.pretrain = True
 
-    @property
-    def batch_size(self):
-        if self._batch_size is None:
-            batch_size = self.config['data']['batch_size']
-            if self.trainer.use_dp:
-                batch_size *= self.config['trainer']['gpus']
-            self._batch_size = batch_size
-        return self._batch_size
-
     def forward(self, x):
-        return self.model.forward(x)
+        return self.model(x)
 
     def training_step(self, batch, batch_idx):
         x, y = batch
@@ -50,7 +43,6 @@ class Experiment(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         x, y = batch
         y_hat = self(x)
-
         loss_val = self.loss(y_hat, y)
         return {'val_loss': loss_val}
 
@@ -66,11 +58,20 @@ class Experiment(pl.LightningModule):
         metrics = {'val_loss': val_loss}
 
         if self.pretrain:
-            self.logger.log_hyperparams(self.config)
+            self.log_hyperparams(self.config)
             self.pretrain = False
         else:
-            self.logger.log_metrics(metrics)
+            self.log_metrics(metrics)
         return metrics
+
+    @rank_zero_only
+    def log_metrics(self, metrics):
+        wandb.log(metrics)
+
+    @rank_zero_only
+    def log_hyperparams(self):
+        wandb.init(config=self.config)
+
 
 
     def configure_optimizers(self):
@@ -86,35 +87,35 @@ class Experiment(pl.LightningModule):
         return [optimizer], [optim_scheduler]
 
     def prepare_data(self):{%if cookiecutter.kaggle_competition %}
-        home_dir = pathlib.Path(__file__)
-        data_dir = home_dir.parent.parent / 'data'
-        dataset_dir = data_dir / COMPETITION_NAME
-        if not dataset_dir.exists():
-            kaggle.api.authenticate()
-            kaggle.api.competition_download_files(COMPETITION_NAME, data_dir)
-            with zipfile.ZipFile(data_dir / f"{COMPETITION_NAME}.zip",
-                                 "r") as f:
-                f.extractall(dataset_dir){% endif %}
-        dataset_dir = 'data/'
+        kwargs = self.config['instance']
+        if 'dataset_dir' not in kwargs:
+            home_dir = pathlib.Path(__file__)
+            data_dir = home_dir.parent.parent / 'data'
+            kwargs['dataset_dir'] = data_dir / COMPETITION_NAME
 
+            
         self.train_instances, self.val_instances = instance.get_train_val_instances(
-            dataset_dir, **self.config['instance'])
+            **kwargs)
 
     def train_dataloader(self):
         dataset = loader.InstanceDataset(self.train_instances,
                                          **self.config['data'])
 
-        return torch.utils.data.DataLoader(dataset, self.batch_size,
-                                           **self.config['loader'])
+        return torch.utils.data.DataLoader(dataset, self.batch_size, 
+                                            shuffle=True, pin_memory=True,
+                                            **self.config['loader'])
 
     def val_dataloader(self):
         dataset = loader.InstanceDataset(self.val_instances,
                                          **self.config['data'])
-        return torch.utils.data.DataLoader(dataset, self.batch_size,
-                                           **self.config['loader'])
+
+        return torch.utils.data.DataLoader(dataset, self.batch_size, 
+                                            shuffle=False, pin_memory=True,
+                                            **self.config['loader'])
 
     @staticmethod
     def run(config):
+        config = util.read_config(config)
         now = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
         run_dir = path.join("wandb", now)
         run_dir = path.abspath(run_dir)
@@ -122,15 +123,21 @@ class Experiment(pl.LightningModule):
 
         checkpoint_callback = callbacks.ModelCheckpoint(
             run_dir + "/{epoch}-{val_loss:.2f}",
-            monitor=config['early_stopping']['monitor'])
+            **config['checkpoint'])
 
-        early_stopping_callback = callbacks.EarlyStopping(
-            **config['early_stopping'])
+        os.environ['WANDB_PROJECT'] = COMPETITION_NAME
+        os.environ['WANDB_RUN_DIR'] = run_dir
 
-        experiment = Experiment(config)
-        trainer = pl.Trainer(logger=pl.loggers.WandbLogger(),
+        if config['load_weights']:
+            experiment = Experiment.load_from_checkpoint(config['load_weights'],
+                                                         config=config)
+
+        else:
+            experiment = Experiment(config)
+
+        trainer = pl.Trainer(logger=None,
                              checkpoint_callback=checkpoint_callback,
-                             early_stop_callback=early_stopping_callback,
+                             early_stop_callback=None,
                              **config['trainer'])
 
         trainer.fit(experiment)

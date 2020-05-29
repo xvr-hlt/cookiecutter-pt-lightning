@@ -6,16 +6,16 @@ from PIL import Image
 {% endif %}
 
 class InstanceDataset(torch.utils.data.Dataset):
+    _classes = {}
+
     def __init__(self,
-        instances,
-        classes,{%if cookiecutter.text|int %}
+        instances,{%if cookiecutter.text|int %}
         tokenizer,
         max_length,{% endif %}{%if cookiecutter.vision|int %}
         img_size,
         augmentation=None,{% endif %}
     ):
-        self.instances = instances
-        self.classes = classes{% if cookiecutter.text|int %}
+        self.instances = instances{% if cookiecutter.text|int %}
         self.tokenizer = tokenizer
         self.max_length = max_length{%endif %}{% if cookiecutter.vision|int %}
         pipeline = []
@@ -34,7 +34,8 @@ class InstanceDataset(torch.utils.data.Dataset):
     def __getitem__(self, ix):
         instance = self.instances[ix]
         target = self.get_target(instance){%if cookiecutter.vision|int %}
-        image = Image.open(instance.path){%if cookiecutter.segmentation|int %}
+        image = Image.open(instance.path)
+        image = np.array(image){%if cookiecutter.segmentation|int %}
         processed = self.pipeline(image=image, mask=target)
         image, mask = processed['image'], processed['mask']
         return image, mask{% else %}
@@ -49,3 +50,23 @@ class InstanceDataset(torch.utils.data.Dataset):
                                           return_tensors='pt')
         text = {k: v.flatten() for k, v in text.items()}
         return text, target{% endif %}
+{%if cookiecutter.vision|int %}
+def get_augmentation(level, prob):
+    augment = []
+    augment.append(transforms.RandomVerticalFlip(prob))
+    augment.append(transforms.RandomHorizontalFlip(prob))
+
+    if level:
+        jitter_val = [0, 0.1, 0.2, 0.3][level]
+        augment.append(
+            transforms.RandomApply([
+                transforms.ColorJitter(brightness=jitter_val,
+                                       contrast=jitter_val)
+            ], prob))
+
+        distortion_scale = [0.0, 0.125, 0.25, 0.5][level]
+        augment.append(
+            transforms.RandomPerspective(distortion_scale=distortion_scale,
+                                         fill=0))
+    return transforms.Compose(augment)
+{% endif %}
