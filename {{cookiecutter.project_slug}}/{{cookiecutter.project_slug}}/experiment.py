@@ -86,7 +86,7 @@ class Experiment(pl.LightningModule):
                                               **optim_scheduler_conf['kwargs'])
         return [optimizer], [optim_scheduler]
 
-    def prepare_data(self):{%if cookiecutter.kaggle_competition %}
+    def prepare_data(self):
         kwargs = self.config['instance']
         if 'dataset_dir' not in kwargs:
             home_dir = pathlib.Path(__file__)
