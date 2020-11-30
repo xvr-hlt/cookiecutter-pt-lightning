@@ -1,43 +1,51 @@
-import torch
+import importlib
+import pathlib
+import typing
+from typing import Any, Dict, Union
+
 import yaml
 
-
-def read_config(config):
-    if isinstance(config, str):
+def load_config(config: Union[Dict[str, Any], str, pathlib.PosixPath]) -> Dict[str, Any]:
+    if isinstance(config, (str, pathlib.PosixPath)):
         with open(config) as f:
             config = yaml.safe_load(f)
+
+    config = typing.cast(dict, config)  # Avoids mypy errors.
+
     if 'wandb_version' in config:
         config.pop('wandb_version')
         config.pop('_wandb')
         config = {k: v['value'] for k, v in config.items()}
-    return config
+
+    if 'from' in config:
+        from_config = load_config(config['from'])
+
+        def recursive_dict_merge(d1: Dict, d2: Dict) -> Dict:
+            for key, val in d1.items():
+                if isinstance(val, dict):
+                    d2_node = d2.setdefault(key, {})
+                    recursive_dict_merge(val, d2_node)
+                else:
+                    if key not in d2:
+                        d2[key] = val
+            return d2
+
+        config = recursive_dict_merge(from_config, config)
+
+    return config  # type: ignore
 
 
-def load_weights(model, weights):
-    weights = torch.load(weights)
-    weights = {
-        k.replace('model.', ''): v
-        for k, v in weights['state_dict'].items()
-        if k.startswith('model')
-    }
-    return model.load_state_dict(weights)
+def load_class(module_name: str, name: str, kwargs) -> Any:
+    """Takes a module name, class/fn name and kwargs and initialises/returns object.
 
-def download_kaggle_dataset(competition_name):
-    home_dir = pathlib.Path(__file__)
-    data_dir = home_dir.parent.parent / 'data'
-    dataset_dir = data_dir / competition_name
-    if not dataset_dir.exists():
-        kaggle.api.authenticate()
-        kaggle.api.competition_download_files(competition_name, data_dir)
-        zip_data = data_dir / f"{competition_name}.zip"
-        with zipfile.ZipFile(zip_data, "r") as f:
-            f.extractall(dataset_dir)
+    Args:
+        module_name (str): Name of module (e.g. tensorflow.keras.applications.efficientnet)
+        name (str): Name of class e.g. EfficientNetB0.
+        kwargs (Optional[Dict[str, Any]]): Kwargs to initialise object with.
 
-def get_model_from_dir(run_dir):
-    run_dir = pathlib.Path(run_dir)
-    model_config = read_config(str(run_dir / 'config.yaml'))
-    net = model.get_model(load_weights=False, **model_config['model'])
-    net = net.cuda()
-    load_weights(net, run_dir / 'model.ckpt')
-    net = net.eval()
-    return net
+    Returns:
+        Any: Instantiated class.
+    """
+    module = importlib.import_module(module_name)
+    cls_fn = getattr(module, name)
+    return cls_fn(**kwargs)
